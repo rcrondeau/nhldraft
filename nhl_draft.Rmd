@@ -1,0 +1,157 @@
+---
+logo: images/sdb_analytics.png
+runtime: shiny
+output: 
+  flexdashboard::flex_dashboard:
+    theme: readable
+    orientation: columns
+    vertical_layout: fill
+    source_code: embed
+---
+
+```{r global, include=FALSE}
+library(devtools)
+library(tidyverse)
+library(ggplot2)
+library(ggpmisc)
+library(flexdashboard)
+library(shiny)
+library(DT)
+library(shinythemes)
+library(formattable)
+library(plotly)
+draft.combined <- read.csv("data/draftCombined.csv", encoding = "UTF-8")
+data.table::setDT(draft.combined)
+#Get Filter Lists
+f.league <- draft.combined$League
+f.team <- draft.combined$NHL.Team
+f.position <- draft.combined$pos.clean
+f.ptspg <- draft.combined$jr.ptspg
+f.height <- draft.combined$Height.IN
+f.draft <- draft.combined$Draft.Year
+f.jrptspg <- draft.combined$jr.ptspg
+f.jrgames <- draft.combined$GP
+f.progames <- draft.combined$Pro.Games
+
+
+
+```
+
+
+#Draft Analysis
+
+Inputs {.sidebar}
+-----------------------------------------------------------------------
+
+
+```{r}
+selectInput("league","Choose League", choices=sort(c("All", as.vector(unique(f.league)))), selected = "All", multiple=FALSE)
+selectInput("position","Position", choices = c("All", as.vector(unique(f.position))), selected = "All", multiple = FALSE)
+sliderInput("draft", "Choose Draft",
+                   min = min(unique(f.draft)), max = max(unique(f.draft)),
+                   value = c(min(unique(f.draft)),max(unique(f.draft))), step = 1)
+sliderInput("jrptspg", "Junior Points Per Game",
+                   min = min(f.jrptspg), max = max(f.jrptspg),
+                   value = c(min(f.jrptspg),max(f.jrptspg)), step = 0.1)
+sliderInput("jrgames", "Junior Games Played",
+                   min = min(f.jrgames), max = max(f.jrgames),
+                   value = c(min(f.jrgames),max(f.jrgames)), step = 1)
+sliderInput("progames", "NHL Games Played",
+                   min = min(f.progames), max = max(f.progames),
+                   value = c(min(f.progames),max(f.progames)), step = 1)
+```
+
+## Draft Analysis {.tabset .tabset-fade .tabset-pills}
+
+
+### Draft Table
+
+
+```{r echo=FALSE}
+filter1_rows <- reactive({if (input$league == "All") {
+    draft.combined[draft.combined$League %in% sort(c("", as.vector(unique(f.league)))), which = TRUE]
+  } else
+    draft.combined[draft.combined$League %in% input$league, which = TRUE]
+  })
+filter2_rows <- reactive({
+  draft.combined[draft.combined$Draft.Year > min(input$draft) & draft.combined$Draft.Year < max(input$draft), which = TRUE]
+  })
+filter3_rows <- reactive({if (input$position == "All") {
+    draft.combined[draft.combined$pos.clean %in% c("", as.vector(unique(f.position))), which = TRUE]
+  } else
+    draft.combined[draft.combined$pos.clean %in% input$position, which = TRUE]
+  })
+filter4_rows <- reactive({
+  draft.combined[draft.combined$jr.ptspg > min(input$jrptspg) & draft.combined$jr.ptspg < max(input$jrptspg), which = TRUE]
+})
+filter5_rows <- reactive({
+  draft.combined[draft.combined$GP > min(input$jrgames) & draft.combined$GP < max(input$jrgames), which = TRUE]
+})
+filter6_rows <- reactive({
+  draft.combined[draft.combined$Pro.Game > min(input$progames) & draft.combined$Pro.Games < max(input$progames), which = TRUE]
+})
+DT::renderDataTable({
+    final_rows <- intersect(filter1_rows(), filter2_rows())
+    final_rows <- intersect(final_rows,     filter3_rows())
+    final_rows <- intersect(final_rows,     filter4_rows())
+    final_rows <- intersect(final_rows,     filter5_rows())
+    final_rows <- intersect(final_rows,     filter6_rows())
+    final_table <- draft.combined[final_rows]
+  },
+  filter = 'none',
+  options = list(pageLength = 30, autoWidth = TRUE ,dom = 'tlp', list(scrolly = TRUE), columnDefs = list(list(visible=FALSE, targets=0))),
+  rownames = TRUE
+)
+```
+
+
+### Draft Plot
+
+```{r echo=FALSE}
+filter1_rows <- reactive({if (input$league == "All") {
+    draft.combined[draft.combined$League %in% sort(c("", as.vector(unique(f.league)))), which = TRUE]
+  } else
+    draft.combined[draft.combined$League %in% input$league, which = TRUE]
+  })
+filter2_rows <- reactive({
+  draft.combined[draft.combined$Draft.Year > min(input$draft) & draft.combined$Draft.Year < max(input$draft), which = TRUE]
+  })
+filter3_rows <- reactive({if (input$position == "All") {
+    draft.combined[draft.combined$pos.clean %in% c("", as.vector(unique(f.position))), which = TRUE]
+  } else
+    draft.combined[draft.combined$pos.clean %in% input$position, which = TRUE]
+  })
+filter4_rows <- reactive({
+  draft.combined[draft.combined$jr.ptspg > min(input$jrptspg) & draft.combined$jr.ptspg < max(input$jrptspg), which = TRUE]
+})
+filter5_rows <- reactive({
+  draft.combined[draft.combined$GP > min(input$jrgames) & draft.combined$GP < max(input$jrgames), which = TRUE]
+})
+filter6_rows <- reactive({
+  draft.combined[draft.combined$Pro.Games > min(input$progames) & draft.combined$Pro.Games < max(input$progames), which = TRUE]
+})
+renderPlotly({
+  final_rows <- intersect(filter1_rows(), filter2_rows())
+  final_rows <- intersect(final_rows,     filter3_rows())
+  final_rows <- intersect(final_rows,     filter4_rows())
+  final_rows <- intersect(final_rows,     filter5_rows())
+  final_rows <- intersect(final_rows,     filter6_rows())
+  final_table <- draft.combined[final_rows]
+  g.pos <- input$position
+  g.league <- input$league
+  form.all <- final_table$pro.ptspg ~ final_table$jr.ptspg
+  g <- ggplot(final_table, aes(x = jr.ptspg , y = pro.ptspg)) +
+        geom_point(aes(col = League,text = final_table$Player)) + 
+        expand_limits(y=0, x=0) +
+        scale_y_continuous(limits = c(0, max(final_table$jr.ptspg))) +
+        xlab("Junior Points Per Game") +
+        ylab("NHL Points Per Game") + 
+        geom_smooth(method=lm, col = "Red") +
+        ggtitle(paste(g.pos, " (", g.league,")", sep = "")) +
+        #stat_poly_eq(formula = form.all) +
+        theme_classic() +
+        theme(plot.title = element_text(hjust = 0.5), legend.position = "None")
+  ggplotly(g)
+  }
+)
+```
