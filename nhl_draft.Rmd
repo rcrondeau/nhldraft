@@ -4,14 +4,13 @@ runtime: shiny
 output: 
   flexdashboard::flex_dashboard:
     theme: readable
-    orientation: columns
+    orientation: rows
     vertical_layout: fill
     source_code: embed
 ---
 
 ```{r global, include=FALSE}
 library(devtools)
-library(tidyverse)
 library(ggplot2)
 library(ggpmisc)
 library(flexdashboard)
@@ -20,8 +19,12 @@ library(DT)
 library(shinythemes)
 library(formattable)
 library(plotly)
+library(tidyverse)
 draft.combined <- read.csv("data/draftCombined.csv", encoding = "UTF-8")
 data.table::setDT(draft.combined)
+#GET DRAFT QUALITY
+draft.combined$PlayerCat <- if_else(draft.combined$Pro.Games > 70, "NHL Player", "Bust")
+DrftAnalysis <- draft.combined
 #Get Filter Lists
 f.league <- draft.combined$League
 f.team <- draft.combined$NHL.Team
@@ -32,6 +35,7 @@ f.draft <- draft.combined$Draft.Year
 f.jrptspg <- draft.combined$jr.ptspg
 f.jrgames <- draft.combined$GP
 f.progames <- draft.combined$Pro.Games
+f.player <- draft.combined$Player
 
 
 
@@ -62,48 +66,6 @@ sliderInput("progames", "NHL Games Played",
 ```
 
 ## Draft Analysis {.tabset .tabset-fade .tabset-pills}
-
-
-### Draft Table
-
-
-```{r echo=FALSE}
-filter1_rows <- reactive({if (input$league == "All") {
-    draft.combined[draft.combined$League %in% sort(c("", as.vector(unique(f.league)))), which = TRUE]
-  } else
-    draft.combined[draft.combined$League %in% input$league, which = TRUE]
-  })
-filter2_rows <- reactive({
-  draft.combined[draft.combined$Draft.Year > min(input$draft) & draft.combined$Draft.Year < max(input$draft), which = TRUE]
-  })
-filter3_rows <- reactive({if (input$position == "All") {
-    draft.combined[draft.combined$pos.clean %in% c("", as.vector(unique(f.position))), which = TRUE]
-  } else
-    draft.combined[draft.combined$pos.clean %in% input$position, which = TRUE]
-  })
-filter4_rows <- reactive({
-  draft.combined[draft.combined$jr.ptspg > min(input$jrptspg) & draft.combined$jr.ptspg < max(input$jrptspg), which = TRUE]
-})
-filter5_rows <- reactive({
-  draft.combined[draft.combined$GP > min(input$jrgames) & draft.combined$GP < max(input$jrgames), which = TRUE]
-})
-filter6_rows <- reactive({
-  draft.combined[draft.combined$Pro.Game > min(input$progames) & draft.combined$Pro.Games < max(input$progames), which = TRUE]
-})
-DT::renderDataTable({
-    final_rows <- intersect(filter1_rows(), filter2_rows())
-    final_rows <- intersect(final_rows,     filter3_rows())
-    final_rows <- intersect(final_rows,     filter4_rows())
-    final_rows <- intersect(final_rows,     filter5_rows())
-    final_rows <- intersect(final_rows,     filter6_rows())
-    final_table <- draft.combined[final_rows]
-  },
-  filter = 'none',
-  options = list(pageLength = 30, autoWidth = TRUE ,dom = 'tlp', list(scrolly = TRUE), columnDefs = list(list(visible=FALSE, targets=0))),
-  rownames = TRUE
-)
-```
-
 
 ### Draft Plot
 
@@ -146,6 +108,8 @@ renderPlotly({
         scale_y_continuous(limits = c(0, max(final_table$jr.ptspg))) +
         xlab("Junior Points Per Game") +
         ylab("NHL Points Per Game") + 
+        #annotate("text", x = 1, y = max(final_table$jr.ptspg), 
+        #         label = paste("AVG:", mean(final_table$jr.ptspg))) +
         geom_smooth(method=lm, col = "Red") +
         ggtitle(paste(g.pos, " (", g.league,")", sep = "")) +
         #stat_poly_eq(formula = form.all) +
@@ -155,3 +119,164 @@ renderPlotly({
   }
 )
 ```
+
+### Draft Table
+
+
+```{r echo=FALSE}
+filter1_rows <- reactive({if (input$league == "All") {
+    draft.combined[draft.combined$League %in% sort(c("", as.vector(unique(f.league)))), which = TRUE]
+  } else
+    draft.combined[draft.combined$League %in% input$league, which = TRUE]
+  })
+filter2_rows <- reactive({
+  draft.combined[draft.combined$Draft.Year > min(input$draft) & draft.combined$Draft.Year < max(input$draft), which = TRUE]
+  })
+filter3_rows <- reactive({if (input$position == "All") {
+    draft.combined[draft.combined$pos.clean %in% c("", as.vector(unique(f.position))), which = TRUE]
+  } else
+    draft.combined[draft.combined$pos.clean %in% input$position, which = TRUE]
+  })
+filter4_rows <- reactive({
+  draft.combined[draft.combined$jr.ptspg > min(input$jrptspg) & draft.combined$jr.ptspg < max(input$jrptspg), which = TRUE]
+})
+filter5_rows <- reactive({
+  draft.combined[draft.combined$GP > min(input$jrgames) & draft.combined$GP < max(input$jrgames), which = TRUE]
+})
+filter6_rows <- reactive({
+  draft.combined[draft.combined$Pro.Game > min(input$progames) & draft.combined$Pro.Games < max(input$progames), which = TRUE]
+})
+DT::renderDataTable({
+    final_rows <- intersect(filter1_rows(), filter2_rows())
+    final_rows <- intersect(final_rows,     filter3_rows())
+    final_rows <- intersect(final_rows,     filter4_rows())
+    final_rows <- intersect(final_rows,     filter5_rows())
+    final_rows <- intersect(final_rows,     filter6_rows())
+    final_table <- draft.combined[final_rows]
+  },
+  filter = 'none',
+  options = list(pageLength = 30, autoWidth = TRUE ,dom = 'tlp', list(scrolly = TRUE), columnDefs = list(list(visible=FALSE, targets=0))),
+  rownames = TRUE
+)
+```
+
+# Thresholds
+
+Inputs {.sidebar}
+-----------------------------------------------------------------------
+
+
+```{r}
+selectInput("player","Choose Player", choices=as.vector(unique(f.player)), selected = "", multiple=FALSE)
+```
+
+## Draft Analysis {.tabset .tabset-fade .tabset-pills}
+
+### Draft Plot
+
+
+```{r echo = FALSE}
+renderPlot({
+# Get this players ID and find his parameters
+thisPlayer <- unname(unlist(distinct(select(filter(draft.combined, Player == input$player), PlayerID))))
+this_players_info <- filter(draft.combined, PlayerID == thisPlayer)
+this_players_info <- filter(this_players_info, GP == max(this_players_info$GP))
+pHeight <- this_players_info$Height.IN
+pdyptspg <- round(unname(unlist(this_players_info$jr.ptspg)), 3)
+
+if (nrow(this_players_info) > 0) {
+
+  if (this_players_info$pos.clean == "D") {
+    position <- "D" 
+  } else {
+    position <- "F"
+  }
+
+  if (pHeight < 6.01) {
+    hFilter = " < 6.01"
+    hFilterText = "Less than 6'1"
+  } else {
+    hFilter = " >= 6.01"
+    hFilterText = "6'1+"
+  }
+
+  #Filter the draftAnalysis database based on this players parameters
+  threshold <- DrftAnalysis %>% filter_(.dots = paste0("League =='", this_players_info$League, "' & pos.clean =='", position, "' & Height.IN", hFilter))
+
+  if (nrow(threshold) >= 5) {
+
+    players <- threshold %>% select(jr.ptspg, PlayerCat) %>%
+      group_by(PlayerCat) %>%
+      summarise(x = mean(jr.ptspg), y = sd(jr.ptspg), count = n())
+
+    bustPlayers <- filter(players, PlayerCat == "Bust")
+    nhlPlayers <- filter(players, PlayerCat == "NHL Player")
+  
+    pNHL <- round(dnorm(pdyptspg, nhlPlayers$x, nhlPlayers$y), 3)
+    pSample <- data.frame(rnorm(10000, mean = nhlPlayers$x, sd = nhlPlayers$y)) %>%
+    mutate(Projection = "NHL Player") 
+    colnames(pSample) <- c("PTS_PG", "Projection")
+
+    pBust <- round((dnorm(pdyptspg, bustPlayers$x, bustPlayers$y)), 3)
+    bSample <- data.frame(rnorm(10000, bustPlayers$x, bustPlayers$y)) %>%
+      mutate(projection = "Bust")
+    colnames(bSample) <- c("PTS_PG", "Projection")
+
+    allPlayers <- rbind(pSample, bSample) #, pQSample)
+
+    p <- ggplot(allPlayers, aes(x=PTS_PG, fill=Projection)) + geom_density(alpha=.3) +
+      geom_vline(xintercept = pdyptspg, size = 1.5, color = "blue") +
+      annotate("text", x = pdyptspg, y = 1, label = paste0("  PTS/G= ", pdyptspg) , color = "black", hjust = 0) +
+      annotate("text", label = players$count , color = "red", hjust = 0) +
+      ggtitle(paste0(this_players_info$Player, ": Draft Year Points Per Game Threshold Analysis"), 
+            subtitle = paste0("Reference Group: \n\nLeague: ", this_players_info$League, "\nPosition: ", position, "\nHeight: ", hFilterText, "\nSample Size (NHL): ", 
+                              nhlPlayers$count, "\nSample Size (Bust): ", bustPlayers$count)) +
+      xlab("Points Per Game (Draft Year)") +
+      theme(legend.text=element_text(size=16), legend.title = element_text(size = 20)) +
+      theme(plot.title = element_text(size = 16, face = "bold")) +
+      theme(plot.subtitle = element_text(size = 14)) +
+      theme(axis.text.x = element_text(size = 18)) +
+      theme(axis.text.y = element_text(size = 18))
+    p
+    }
+  }  
+})
+```
+
+### Threshold Table
+
+
+```{r echo=FALSE}
+DT::renderDataTable({
+  thisPlayer <- unname(unlist(distinct(select(filter(draft.combined, Player == input$player), PlayerID))))
+this_players_info <- filter(draft.combined, PlayerID == thisPlayer)
+this_players_info <- filter(this_players_info, GP == max(this_players_info$GP))
+pHeight <- this_players_info$Height.IN
+pdyptspg <- round(unname(unlist(this_players_info$jr.ptspg)), 3)
+
+if (nrow(this_players_info) > 0) {
+
+  if (this_players_info$pos.clean == "D") {
+    position <- "D" 
+  } else {
+    position <- "F"
+  }
+
+  if (pHeight < 6.01) {
+    hFilter = " < 6.01"
+    hFilterText = "Less than 6'1"
+  } else {
+    hFilter = " >= 6.01"
+    hFilterText = "6'1+"
+  }
+
+  #Filter the draftAnalysis database based on this players parameters
+  threshold <- DrftAnalysis %>% filter_(.dots = paste0("League =='", this_players_info$League, "' & pos.clean =='", position, "' & Height.IN", hFilter))
+}
+  },
+  filter = 'none',
+  options = list(pageLength = 30, autoWidth = TRUE ,dom = 'tlp', list(scrolly = TRUE), columnDefs = list(list(visible=FALSE, targets=0))),
+  rownames = TRUE
+)
+```
+
