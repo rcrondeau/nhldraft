@@ -120,7 +120,10 @@ renderPlotly({
 )
 ```
 
-### Draft Table
+Draft Player Table {data-orientation=rows}
+=====================================
+
+## Draft Table
 
 
 ```{r echo=FALSE}
@@ -170,9 +173,9 @@ Inputs {.sidebar}
 selectInput("player","Choose Player", choices=as.vector(unique(f.player)), selected = "", multiple=FALSE)
 ```
 
-## Draft Analysis {.tabset .tabset-fade .tabset-pills}
+## Threshold Analysis {.tabset .tabset-fade .tabset-pills}
 
-### Draft Plot
+### Threshold Plot
 
 
 ```{r echo = FALSE}
@@ -243,7 +246,10 @@ if (nrow(this_players_info) > 0) {
 })
 ```
 
-### Threshold Table
+Threshold Player Table {data-orientation=rows}
+=====================================
+
+## Threshold Table
 
 
 ```{r echo=FALSE}
